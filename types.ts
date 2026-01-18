@@ -196,6 +196,15 @@ export interface IntegrationConfig {
   settings: Record<string, any>;
 }
 
+export interface ApiKey {
+  id: string;
+  name: string;
+  key: string;
+  created_at: string;
+  last_used?: string;
+  is_active: boolean;
+}
+
 export interface Backup {
   id: string;
   filename: string;

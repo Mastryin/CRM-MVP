@@ -1,6 +1,6 @@
 
 import { v4 as uuidv4 } from 'uuid';
-import { User, Lead, Activity, AssignmentRotation, EmailTemplate, SmtpConfig, WhatsAppTemplate, WebhookConfig, Backup, SystemMetrics, IntegrationConfig, TrafftAppointment } from '../types';
+import { User, Lead, Activity, AssignmentRotation, EmailTemplate, SmtpConfig, WhatsAppTemplate, WebhookConfig, Backup, SystemMetrics, IntegrationConfig, TrafftAppointment, ApiKey } from '../types';
 import { DEFAULT_STATUSES, SUPERADMIN_EMAIL, DEFAULT_EMAIL_TEMPLATES, DEFAULT_WHATSAPP_TEMPLATES } from '../constants';
 import { normalizePhone } from '../utils/helpers';
 
@@ -17,6 +17,7 @@ const KEYS = {
   BACKUPS: 'mastry_backups',
   TRASH: 'mastry_trash',
   TAGS: 'mastry_defined_tags',
+  API_KEYS: 'mastry_api_keys',
   INIT: 'mastry_initialized'
 };
 
@@ -156,6 +157,7 @@ const initializeDb = () => {
   
   // Initialize integrations with defaults
   const defaultIntegrations: IntegrationConfig[] = [
+      { provider: 'pabbly', enabled: false, settings: { webhook_url: '', triggers: [] } },
       { provider: 'trafft', enabled: false, settings: { api_url: '', client_id: '', client_secret: '' } },
       { provider: 'deftform', enabled: false, settings: { api_key: '' } },
       { provider: 'encharge', enabled: false, settings: { api_key: '', write_key: '' } },
@@ -167,6 +169,7 @@ const initializeDb = () => {
   localStorage.setItem(KEYS.BACKUPS, JSON.stringify([]));
   localStorage.setItem(KEYS.SMTP_CONFIG, JSON.stringify({ is_configured: false }));
   localStorage.setItem(KEYS.TAGS, JSON.stringify([]));
+  localStorage.setItem(KEYS.API_KEYS, JSON.stringify([]));
 
   localStorage.setItem(KEYS.INIT, 'true');
 };
@@ -638,6 +641,24 @@ export const triggerAutomation = (type: 'email' | 'whatsapp', leadId: string, co
 
 export const triggerWebhook = (event: string, payload: any) => {
     const webhooks = getWebhooks().filter(w => w.is_active && w.triggers.includes(event));
+    
+    // Check Pabbly Integration
+    const integrations = getIntegrations();
+    const pabbly = integrations.find(i => i.provider === 'pabbly');
+    if (pabbly && pabbly.enabled && pabbly.settings.webhook_url && pabbly.settings.triggers?.includes(event)) {
+        console.log(`[Pabbly Integration] Triggering ${pabbly.settings.webhook_url} for ${event}`);
+        if (payload.id) {
+             const success = Math.random() > 0.1;
+             logActivity(payload.id, 'webhook_triggered', {
+                 webhook_name: 'Pabbly Connect',
+                 url: pabbly.settings.webhook_url,
+                 status: success ? 200 : 500,
+                 latency_ms: Math.floor(Math.random() * 500),
+                 response: success ? 'OK' : 'Internal Server Error'
+             }, 'system');
+        }
+    }
+
     webhooks.forEach(w => {
         console.log(`[Mock Webhook] Triggering ${w.webhook_url} for ${event}`);
         if (payload.id) {
@@ -809,3 +830,26 @@ export const getTrafftAppointments = (): TrafftAppointment[] => {
     // We return the static MOCK data here.
     return MOCK_TRAFFT_APPOINTMENTS;
 };
+
+// API Keys
+export const getApiKeys = (): ApiKey[] => get<ApiKey[]>(KEYS.API_KEYS);
+
+export const generateApiKey = (name: string, userId: string) => {
+    const keys = getApiKeys();
+    const newKey: ApiKey = {
+        id: uuidv4(),
+        name,
+        key: `mk_${uuidv4().replace(/-/g, '')}`,
+        created_at: new Date().toISOString(),
+        is_active: true
+    };
+    keys.push(newKey);
+    set(KEYS.API_KEYS, keys);
+    return newKey;
+}
+
+export const revokeApiKey = (id: string) => {
+    let keys = getApiKeys();
+    keys = keys.filter(k => k.id !== id);
+    set(KEYS.API_KEYS, keys);
+}
